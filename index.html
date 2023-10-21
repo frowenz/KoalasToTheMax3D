@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Koalas to the Max 3D</title>
+
+    <link rel="icon" href="favicon.png" type="image/x-icon" />
+
+    <link rel="stylesheet" type="text/css" href="./styling.css" />
+    <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+    <script type="importmap">
+        {
+          "imports": {
+            "three": "https://unpkg.com/three@0.156.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.156.0/examples/jsm/"
+          }
+        }
+      </script>
+    <script src="./spinner.js"></script>
+</head>
+
+<body>
+
+    <body>
+        <canvas id="canvas"></canvas>
+        <div class="container">
+            <div id="loading-container">
+
+                loading . . .
+                <div id="loading-box">
+                    <div id="loading-bar"></div>
+                </div>
+            </div>
+        </div>
+    </body>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js'></script>
+    <script type="module">
+        import * as THREE from "three";
+        import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+        import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+        import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+
+        const containerEl = document.querySelector('.container');
+        const canvasEl = document.querySelector('#canvas');
+        const loaderEl = document.querySelector('#loader');
+        var glbModel;
+
+        let renderer, scene, mainCamera, orbit, lightHolder, topLight;
+        let instancedMesh, voxelGeometry, voxelMaterial;
+        let dummy, rayCaster, rayCasterIntersects = [];
+
+        const voxelsPerModel = [];
+        let voxels = [];
+        const modelURL = './models/Bulbasaur.glb';
+        const params = {
+            modelSize: 7.5,
+            boxSize: .125,
+            boxRoundness: .03
+        }
+        const animationTime = 0.45
+
+        var leafSize = params.boxSize
+        var xMax = -Infinity, xMin = Infinity, yMax = -Infinity, yMin = Infinity, zMax = -Infinity, zMin = Infinity;
+        var voxelList = [];
+
+        // Voxel class definition
+        class Voxel {
+            constructor(position, size, color, opacity = 1) {
+                this.position = position; // Vector3
+                this.size = size; // Number
+                this.color = color; // Color
+                this.children = [];
+                this.parent = null;
+                this.isAnimating = false;
+
+                // Create the Three.js mesh
+                const geometry = new RoundedBoxGeometry(this.size, this.size, this.size, 2, 0.1 * this.size);
+                const material = new THREE.MeshLambertMaterial({
+                    color: this.color,
+                    transparent: true,
+                    opacity: opacity
+                });
+                this.mesh = new THREE.Mesh(geometry, material);
+                this.mesh.castShadow = true;
+                this.mesh.receiveShadow = true;
+
+                this.mesh.position.copy(this.position);
+                this.mesh.voxel = this;
+
+                // Initialize as the original color
+                this.originalColor = this.color.clone();
+            }
+
+            isLeaf() {
+                return this.children.length === 0;
+            }
+
+            addChild(child) {
+                this.children.push(child);
+                child.parent = this;
+            }
+
+            subdivide() {
+                if (!this.isLeaf()) {
+                    scene.remove(this.mesh); // Remove the original voxel
+
+                    this.children.forEach((child, index) => {
+                        // Initialize with the parent's size and position
+                        child.mesh.scale.set(2, 2, 2);
+                        child.mesh.renderOrder = index;
+                        child.mesh.position.set(this.position.x, this.position.y, this.position.z);
+
+                        child.isAnimating = true;
+                        scene.add(child.mesh); // Add the child to the scene
+
+                        // Animate to the actual size and position
+                        gsap.to(child.mesh.scale, {
+                            x: 1,
+                            y: 1,
+                            z: 1,
+                            duration: animationTime + 0.125 * index - 0.375
+                        });
+
+                        gsap.to(child.mesh.position, {
+                            x: child.position.x,
+                            y: child.position.y,
+                            z: child.position.z,
+                            duration: animationTime,
+                            onComplete: function () {
+                                child.isAnimating = false; // Set isAnimating to false once the animation is complete
+                            }
+                        });
+                    });
+                }
+            }
+        }
+
+        function buildOctree(rootParent, voxelList, height) {
+            if (height <= -2) {
+                voxelList.forEach(voxel => {
+                    rootParent.addChild(voxel);
+                });
+                return;
+            }
+
+            // Divide the current space into 8 smaller boxes
+            const subBoxes = subdivideSpace(rootParent.position, rootParent.size);
+
+            for (let subBox of subBoxes) {
+                // Find all voxels that fit within this smaller box
+                const childVoxels = voxelList.filter(voxel => fitsInBox(voxel, subBox));
+
+                let thisColor = calculateMeanColor(childVoxels);
+
+                if (childVoxels.length > 0) {
+
+                    // Create a new voxel that represents this sub-space
+                    var childVoxel = new Voxel(subBox.position, subBox.size, thisColor, 1);
+
+                    // Attach it to the parent
+                    rootParent.addChild(childVoxel);
+
+                    // Recurse
+                    buildOctree(childVoxel, childVoxels, height - 1);
+                }
+            }
+        }
+
+        // Subdivision logic
+        function subdivideSpace(parentPosition, parentSize) {
+            // Calculate the new size for the sub-boxes
+            const newSize = parentSize / 2;
+
+            // Calculate the offset for positioning the sub-boxes
+            const offset = newSize / 2;
+
+            // Initialize an array to store the sub-boxes
+            const subBoxes = [];
+
+            // Generate the 8 sub-boxes
+            for (let x = -1; x <= 1; x += 2) {
+                for (let y = -1; y <= 1; y += 2) {
+                    for (let z = -1; z <= 1; z += 2) {
+                        // Calculate the position for the new sub-box
+                        const xPos = parentPosition.x + (x * offset);
+                        const yPos = parentPosition.y + (y * offset);
+                        const zPos = parentPosition.z + (z * offset);
+
+                        // Create the new sub-box and add it to the array
+                        const subBox = {
+                            position: new THREE.Vector3(xPos, yPos, zPos),
+                            size: newSize
+                        };
+                        subBoxes.push(subBox);
+                    }
+                }
+            }
+
+            return subBoxes;
+        }
+
+        function calculateMeanColor(voxels) {
+            // Initialize the sum of the RGB values
+            let sumR = 0;
+            let sumG = 0;
+            let sumB = 0;
+
+            // Sum up the RGB values of all voxels
+            for (let voxel of voxels) {
+                sumR += voxel.color.r;
+                sumG += voxel.color.g;
+                sumB += voxel.color.b;
+            }
+
+            // Calculate the average RGB values
+            const avgR = sumR / voxels.length;
+            const avgG = sumG / voxels.length;
+            const avgB = sumB / voxels.length;
+
+            // Return the average color
+            return new THREE.Color(avgR, avgG, avgB);
+        }
+
+        function fitsInBox(voxel, subBox) {
+            const voxelPos = voxel.position;
+            const subBoxPos = subBox.position;
+            const subBoxSize = subBox.size;
+
+            // Calculate the min and max corners of subBox
+            const subBoxMin = {
+                x: subBoxPos.x - subBoxSize / 2,
+                y: subBoxPos.y - subBoxSize / 2,
+                z: subBoxPos.z - subBoxSize / 2
+            };
+
+            const subBoxMax = {
+                x: subBoxPos.x + subBoxSize / 2,
+                y: subBoxPos.y + subBoxSize / 2,
+                z: subBoxPos.z + subBoxSize / 2
+            };
+
+            // Check if the voxel's midpoint is within the subBox
+            return voxelPos.x >= subBoxMin.x && voxelPos.x < subBoxMax.x &&
+                voxelPos.y >= subBoxMin.y && voxelPos.y < subBoxMax.y &&
+                voxelPos.z >= subBoxMin.z && voxelPos.z < subBoxMax.z;
+        }
+
+
+        function createscene() {
+            renderer = new THREE.WebGLRenderer({
+                canvas: canvasEl,
+                alpha: true,
+                antialias: true
+            });
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMapSoft = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.setScissorTest(true);
+
+            scene = new THREE.Scene();
+
+            mainCamera = new THREE.PerspectiveCamera(45, containerEl.clientWidth / containerEl.clientHeight, .01, 1000);
+            mainCamera.position.set(0, .5, 2).multiplyScalar(8);
+
+            rayCaster = new THREE.Raycaster();
+            dummy = new THREE.Object3D();
+
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x999999, 0.75);
+            scene.add(hemiLight);
+
+            lightHolder = new THREE.Group();
+
+            topLight = new THREE.SpotLight(0xffffff, 6);
+            topLight.position.set(1, 10, 0);
+            topLight.castShadow = true;
+            topLight.shadow.camera.near = 10;
+            topLight.shadow.camera.far = 30;
+            topLight.shadow.mapSize = new THREE.Vector2(768, 768);
+
+            scene.add(topLight);
+
+            orbit = new OrbitControls(mainCamera, containerEl);
+            orbit.enablePan = false;
+            orbit.autoRotate = false;
+            orbit.minDistance = 2.5;
+            orbit.maxDistance = 30;
+            orbit.minPolarAngle = 0
+            orbit.enableDamping = true;
+
+            const planeGeometry = new THREE.PlaneGeometry(35, 35);
+            const shadowPlaneMaterial = new THREE.ShadowMaterial({
+                opacity: .1
+            });
+            const shadowPlaneMesh = new THREE.Mesh(planeGeometry, shadowPlaneMaterial);
+            shadowPlaneMesh.position.y = -7;
+            shadowPlaneMesh.rotation.x = -.5 * Math.PI;
+            shadowPlaneMesh.receiveShadow = true;
+
+            scene.add(shadowPlaneMesh);
+
+
+
+        }
+
+        function loadModel() {
+            const loader = new GLTFLoader();
+
+            loader.load(modelURL, (gltf) => {
+                glbModel = gltf.scene;
+
+                console.log("here")
+
+                voxelizeModel(gltf.scene);
+
+                // loaderEl.style.opacity = 0
+                updateSceneSize();
+                render();
+
+                // Calculate the bounding box
+                for (let voxel of voxelList) {
+                    let x = voxel.position.x;
+                    let y = voxel.position.y;
+                    let z = voxel.position.z;
+
+                    xMax = Math.max(xMax, x + leafSize / 2);
+                    xMin = Math.min(xMin, x - leafSize / 2);
+                    yMax = Math.max(yMax, y + leafSize / 2);
+                    yMin = Math.min(yMin, y - leafSize / 2);
+                    zMax = Math.max(zMax, z + leafSize / 2);
+                    zMin = Math.min(zMin, z - leafSize / 2);
+                }
+
+
+                const maxDimension = Math.max(xMax - xMin, yMax - yMin, zMax - zMin);
+                const maxHeight = Math.ceil(Math.log2(maxDimension))
+                const rootSize = Math.pow(2, maxHeight);
+
+                var meanPosition = [
+                    xMin + maxHeight / 2,
+                    yMin + maxHeight / 2,
+                    zMin + maxHeight / 2
+                ]
+
+                var lookAtPos = [
+                    xMax / 2 + xMin / 2,
+                    yMax / 2 + yMin / 2,
+                    zMax / 2 + zMin / 2
+                ]
+
+                orbit.target.set(...lookAtPos);
+                orbit.update();
+
+                const rootPosition = new THREE.Vector3(...meanPosition);
+                const root = new Voxel(rootPosition, rootSize, calculateMeanColor(voxelList), 1);
+                scene.add(root.mesh);
+                buildOctree(root, voxelList, maxHeight);
+            }, undefined, (error) => {
+                console.error(error);
+            });
+        }
+
+
+
+        const rayDirections = [
+            new THREE.Vector3(1, 0, 0),
+            new THREE.Vector3(0, 1, 0),
+            new THREE.Vector3(-1, 0, 0),
+            new THREE.Vector3(0, 0, 1),
+            new THREE.Vector3(0, 0, -1),
+        ];
+
+        async function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        async function voxelizeModel(importedScene) {
+            const importedMeshes = [];
+            importedScene.traverse((child) => {
+                if (child instanceof THREE.Mesh) {
+                    child.material.side = THREE.DoubleSide;
+                    importedMeshes.push(child);
+                }
+            });
+
+            let boundingBox = new THREE.Box3().setFromObject(importedScene);
+            const size = boundingBox.getSize(new THREE.Vector3());
+            const scaleFactor = params.modelSize / size.length();
+            const center = boundingBox.getCenter(new THREE.Vector3()).multiplyScalar(-scaleFactor);
+
+            importedScene.scale.multiplyScalar(scaleFactor);
+            importedScene.position.copy(center);
+            importedScene.position.set(0, 0, 0);
+
+            boundingBox = new THREE.Box3().setFromObject(importedScene);
+
+            const loadingBar = document.getElementById("loading-bar");
+
+            for (let i = boundingBox.min.x; i < boundingBox.max.x; i += params.boxSize) {
+                for (let j = boundingBox.min.y; j < boundingBox.max.y; j += params.boxSize) {
+                    for (let k = boundingBox.min.z; k < boundingBox.max.z; k += params.boxSize) {
+                        for (let meshCnt = importedMeshes.length - 1; meshCnt >= 0; meshCnt--) {
+
+                            // calculate percentage
+                            let percentage = (i - boundingBox.min.x) / (boundingBox.max.x - boundingBox.min.x);
+                            console.log(percentage)
+                            loadingBar.style.width = percentage * 100 + "%";
+
+
+                            const mesh = importedMeshes[meshCnt];
+                            const color = new THREE.Color();
+                            const { h, s, l } = mesh.material.color.getHSL(color);
+                            color.setHSL(h, s, l * .8 + .3);
+                            const pos = new THREE.Vector3(i, j, k);
+
+                            if (isInsideMesh(pos, rayDirections, mesh)) {
+                                const voxel = new Voxel(
+                                    pos,
+                                    leafSize,
+                                    color
+                                );
+
+                                voxelList.push(voxel);
+                                break;
+                            }
+
+                            await sleep(0);
+                        }
+                    }
+                }
+            }
+        }
+
+        function isInsideMesh(pos, rayDirections, mesh, confidenceThreshold = 0.51) {
+            let insideCount = 0;
+
+            // Loop through each ray direction and count the number of times we are "inside"
+            for (const ray of rayDirections) {
+                rayCaster.set(pos, ray);
+                const rayCasterIntersects = rayCaster.intersectObject(mesh, true);
+
+                if (rayCasterIntersects.length % 2 === 1) {
+                    insideCount++;
+                }
+            }
+
+            // Calculate the confidence level for this voxel being "inside"
+            const confidence = insideCount / rayDirections.length;
+
+            // Check if the confidence is greater than or equal to the threshold
+            return confidence >= confidenceThreshold;
+        }
+
+        function onMouseMove(event) {
+            // Update the mouse variable
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        }
+
+        createscene();
+        loadModel();
+        window.addEventListener('resize', updateSceneSize);
+        window.addEventListener('mousemove', onMouseMove, false);
+        let raycaster = new THREE.Raycaster();
+        let mouse = new THREE.Vector2(Infinity, Infinity);
+
+        function render() {
+            renderer.setViewport(0, 0, containerEl.clientWidth, containerEl.clientHeight);
+            renderer.setScissor(0, 0, containerEl.clientWidth, containerEl.clientHeight);
+
+            raycaster.setFromCamera(mouse, mainCamera);
+            let intersects = raycaster.intersectObjects(scene.children, true);
+
+            while (intersects.length > 0 && intersects[0].object.voxel == null) {
+                intersects.shift()
+            }
+            if (intersects.length > 0 && intersects[0].object.voxel.isAnimating == false) {
+                intersects[0].object.voxel.subdivide()
+            }
+
+            renderer.render(scene, mainCamera);
+            requestAnimationFrame(render);
+
+            mouse.x = Infinity;
+            mouse.y = Infinity;
+        }
+
+        function updateSceneSize() {
+            mainCamera.aspect = containerEl.clientWidth / containerEl.clientHeight;
+            renderer.setSize(containerEl.clientWidth, containerEl.clientHeight);
+        }
+
+
+    </script>
+</body>
+
+</html>
