@@ -2,10 +2,12 @@
 
 A 3D demo inspired by the classic [Koalas to the Max](http://www.koalastothemax.com/). Subdivide a single voxel into a detailed voxelized glTF model. Built using [three.js](https://threejs.org/).
 
+https://github.com/frowenz/KoalasToTheMax3D/assets/69015620/bdf65ca2-d876-48a4-a463-228341a69ae8
+
 <!-- html video tag -->
 <video style="max-height: 300px" width="auto" controls muted autoplay loop>
   <source src="./video.mp4" type="video/mp4">
-  </video>
+</video>
 
 ## Custom Models 
 Better support for custom models coming soon. If you download the code, you can load in own glTF model by replacing the `koala.glb` file in the `models` folder. You will also need to change the `modelPath` variable in `index.js` to point to your model:
