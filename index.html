@@ -35,33 +35,38 @@
     <script src='https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js'></script> <!-- Animations -->
 
     <script type="module">
+        // ================== IMPORTS ================== //
         import * as THREE from "three";
         import { OrbitControls } from "three/addons/controls/OrbitControls.js";
         import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
         import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+        
 
+        // ================== VARIABLES ================== //
         const containerEl = document.querySelector('.container');
         const canvasEl = document.querySelector('#canvas');
 
         let renderer, scene, mainCamera, orbit, lightHolder, topLight;
         let dummy, rayCaster, rayCasterIntersects = [];
 
-
-
         const params = {
             modelSize: 6.875,
             boxSize: 0.125,
-            animationTime: 0.5,
+            animationTime: 0.45,
         }
+
+        const rayDirections = [
+            new THREE.Vector3(1, 0, 0),
+            new THREE.Vector3(0, 1, 0),
+            new THREE.Vector3(-1, 0, 0),
+            new THREE.Vector3(0, 0, 1),
+            new THREE.Vector3(0, 0, -1),
+        ];
 
         var leafSize = params.boxSize
         var xMax = -Infinity, xMin = Infinity, yMax = -Infinity, yMin = Infinity, zMax = -Infinity, zMin = Infinity;
 
 
-        // Function to get URL parameters
-        function getURLParameter(name) {
-            return new URLSearchParams(window.location.search).get(name);
-        }
 
         var modelURL = './models/Koala.glb';
         const currentModel = getURLParameter('model');
@@ -69,9 +74,23 @@
             modelURL = './models/Bulbasaur.glb';
         }
 
-
-
         var voxelList = [];
+
+        // ================== MAIN ================== //
+
+        let mouse = new THREE.Vector2(Infinity, Infinity);
+        createscene();
+        loadModel();
+        window.addEventListener('resize', updateSceneSize);
+        window.addEventListener('mousemove', onMouseMove, false);
+
+
+        // ================== CLASSES & FUNCTIONS ================== //
+
+         // Function to get URL parameters
+         function getURLParameter(name) {
+            return new URLSearchParams(window.location.search).get(name);
+        }
 
         // Voxel class definition
         class Voxel {
@@ -91,15 +110,13 @@
                     transparent: true,
                     opacity: opacity
                 });
+
                 this.mesh = new THREE.Mesh(geometry, material);
                 this.mesh.castShadow = true;
                 this.mesh.receiveShadow = true;
 
                 this.mesh.position.copy(this.position);
                 this.mesh.voxel = this;
-
-                // Initialize as the original color
-                this.originalColor = this.color.clone();
             }
 
             isLeaf() {
@@ -113,14 +130,14 @@
 
             subdivide() {
                 if (!this.isLeaf()) {
-                    scene.remove(this.mesh); // Remove the original voxel
+                    // Remove the original voxel
+                    scene.remove(this.mesh); 
 
                     this.children.forEach((child, index) => {
                         // Initialize with the parent's size and position
                         child.mesh.scale.set(2, 2, 2);
                         child.mesh.renderOrder = index;
                         child.mesh.position.set(this.position.x, this.position.y, this.position.z);
-
                         child.isAnimating = true;
                         scene.add(child.mesh); // Add the child to the scene)
 
@@ -147,9 +164,7 @@
         }
 
         function buildOctree(rootParent, voxelList, height) {
-            console.log("- - - - - -")
-            console.log(rootParent.size)
-            console.log(leafSize)
+            // If we have reached the maximum height, stop subdividing
             if (rootParent.size == leafSize * 2) {
                 voxelList.forEach(voxel => {
                     rootParent.addChild(voxel);
@@ -275,7 +290,8 @@
 
             scene = new THREE.Scene();
 
-            mainCamera = new THREE.PerspectiveCamera(45, containerEl.clientWidth / containerEl.clientHeight, .01, 1000);
+            // PerspectiveCamera( fov : Number, aspect : Number, near : Number, far : Number )
+            mainCamera = new THREE.PerspectiveCamera(45, containerEl.clientWidth / containerEl.clientHeight, .01, 50);
             mainCamera.position.set(0, .5, 2).multiplyScalar(8);
 
             rayCaster = new THREE.Raycaster();
@@ -287,7 +303,7 @@
             lightHolder = new THREE.Group();
 
             topLight = new THREE.SpotLight(0xffffff, 6);
-            topLight.position.set(1, 10, 0);
+            topLight.position.set(1, 15, 0);
             topLight.castShadow = true;
             topLight.shadow.camera.near = 10;
             topLight.shadow.camera.far = 30;
@@ -301,18 +317,6 @@
             orbit.minDistance = 2.5;
             orbit.maxDistance = 30;
             orbit.minPolarAngle = 0
-            // orbit.enableDamping = true;
-
-            // const planeGeometry = new THREE.PlaneGeometry(35, 35);
-            // const shadowPlaneMaterial = new THREE.ShadowMaterial({
-            //     opacity: .1
-            // });
-            // const shadowPlaneMesh = new THREE.Mesh(planeGeometry, shadowPlaneMaterial);
-            // shadowPlaneMesh.position.y = -7;
-            // shadowPlaneMesh.rotation.x = -.5 * Math.PI;
-            // shadowPlaneMesh.receiveShadow = true;
-
-            // scene.add(shadowPlaneMesh);
         }
 
         async function loadModel() {
@@ -374,14 +378,6 @@
                 console.error("Error: ", error);
             });
         }
-
-        const rayDirections = [
-            new THREE.Vector3(1, 0, 0),
-            new THREE.Vector3(0, 1, 0),
-            new THREE.Vector3(-1, 0, 0),
-            new THREE.Vector3(0, 0, 1),
-            new THREE.Vector3(0, 0, -1),
-        ];
 
         async function voxelizeModel(importedScene) {
             const importedMeshes = [];
@@ -456,20 +452,12 @@
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
         }
 
-        let raycaster = new THREE.Raycaster();
-        let mouse = new THREE.Vector2(Infinity, Infinity);
-        createscene();
-        loadModel();
-
-        window.addEventListener('resize', updateSceneSize);
-        window.addEventListener('mousemove', onMouseMove, false);
-
         function render() {
             renderer.setViewport(0, 0, containerEl.clientWidth, containerEl.clientHeight);
             renderer.setScissor(0, 0, containerEl.clientWidth, containerEl.clientHeight);
 
-            raycaster.setFromCamera(mouse, mainCamera);
-            let intersects = raycaster.intersectObjects(scene.children, true);
+            rayCaster.setFromCamera(mouse, mainCamera);
+            let intersects = rayCaster.intersectObjects(scene.children, true);
 
             while (intersects.length > 0 && intersects[0].object.voxel == null) {
                 intersects.shift()
