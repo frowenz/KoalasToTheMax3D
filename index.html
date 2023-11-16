@@ -46,8 +46,8 @@
         let renderer, scene, mainCamera, orbit, lightHolder, topLight;
         let dummy, rayCaster, rayCasterIntersects = [];
 
-        // const modelURL = './models/Bulbasaur.glb';
-        const modelURL = './models/Koala.glb';
+
+
         const params = {
             modelSize: 6.875,
             boxSize: 0.125,
@@ -56,6 +56,19 @@
 
         var leafSize = params.boxSize
         var xMax = -Infinity, xMin = Infinity, yMax = -Infinity, yMin = Infinity, zMax = -Infinity, zMin = Infinity;
+
+
+        // Function to get URL parameters
+        function getURLParameter(name) {
+            return new URLSearchParams(window.location.search).get(name);
+        }
+
+        var modelURL = './models/Koala.glb';
+        const currentModel = getURLParameter('model');
+        if (currentModel === 'bulbasaur') {
+            modelURL = './models/Bulbasaur.glb';
+        }
+
 
 
         var voxelList = [];
@@ -134,9 +147,9 @@
         }
 
         function buildOctree(rootParent, voxelList, height) {
-            console.log ("- - - - - -")
-            console.log (rootParent.size)
-            console.log (leafSize)
+            console.log("- - - - - -")
+            console.log(rootParent.size)
+            console.log(leafSize)
             if (rootParent.size == leafSize * 2) {
                 voxelList.forEach(voxel => {
                     rootParent.addChild(voxel);
