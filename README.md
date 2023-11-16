@@ -1,6 +1,7 @@
 # Koalas to the Max 3D
 
 A 3D demo inspired by the classic [Koalas to the Max](http://www.koalastothemax.com/). Subdivide a single voxel into a detailed voxelized glTF model. Built using [three.js](https://threejs.org/).
+Check out bulbsaur by adding `?model=bulbasaur` to the URL.
 
 https://github.com/frowenz/KoalasToTheMax3D/assets/69015620/bdf65ca2-d876-48a4-a463-228341a69ae8
 
