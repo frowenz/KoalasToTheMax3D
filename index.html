@@ -4,12 +4,14 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>Koalas to the Max 3D</title>
 
     <link rel="icon" href="favicon.png" type="image/x-icon" />
-
     <link rel="stylesheet" type="text/css" href="./styling.css" />
+
     <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+    <!-- Necessary for importmap -->
     <script type="importmap">
         {
           "imports": {
@@ -18,24 +20,20 @@
           }
         }
       </script>
+
     <script src="./spinner.js"></script>
 </head>
 
 <body>
-
-    <body>
-        <canvas id="canvas"></canvas>
-        <div class="container">
-            <div id="loading-container">
-
-                loading . . .
-                <div id="loading-box">
-                    <div id="loading-bar"></div>
-                </div>
-            </div>
+    <canvas id="canvas"></canvas>
+    <div class="container">
+        <div id="centered-text">
+            Loading is still being optimzied and takes about a minute.
         </div>
-    </body>
-    <script src='https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js'></script>
+    </div>
+
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js'></script> <!-- Animations -->
+
     <script type="module">
         import * as THREE from "three";
         import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -44,25 +42,22 @@
 
         const containerEl = document.querySelector('.container');
         const canvasEl = document.querySelector('#canvas');
-        const loaderEl = document.querySelector('#loader');
-        var glbModel;
 
         let renderer, scene, mainCamera, orbit, lightHolder, topLight;
-        let instancedMesh, voxelGeometry, voxelMaterial;
         let dummy, rayCaster, rayCasterIntersects = [];
 
-        const voxelsPerModel = [];
-        let voxels = [];
-        const modelURL = './models/Bulbasaur.glb';
+        // const modelURL = './models/Bulbasaur.glb';
+        const modelURL = './models/Koala.glb';
         const params = {
-            modelSize: 7.5,
-            boxSize: .125,
-            boxRoundness: .03
+            modelSize: 6.875,
+            boxSize: 0.125,
+            animationTime: 0.5,
         }
-        const animationTime = 0.45
 
         var leafSize = params.boxSize
         var xMax = -Infinity, xMin = Infinity, yMax = -Infinity, yMin = Infinity, zMax = -Infinity, zMin = Infinity;
+
+
         var voxelList = [];
 
         // Voxel class definition
@@ -76,6 +71,7 @@
                 this.isAnimating = false;
 
                 // Create the Three.js mesh
+                // RoundedBoxGeometry( width , height , depth , radius , radiusSegments )
                 const geometry = new RoundedBoxGeometry(this.size, this.size, this.size, 2, 0.1 * this.size);
                 const material = new THREE.MeshLambertMaterial({
                     color: this.color,
@@ -113,21 +109,21 @@
                         child.mesh.position.set(this.position.x, this.position.y, this.position.z);
 
                         child.isAnimating = true;
-                        scene.add(child.mesh); // Add the child to the scene
+                        scene.add(child.mesh); // Add the child to the scene)
 
                         // Animate to the actual size and position
                         gsap.to(child.mesh.scale, {
                             x: 1,
                             y: 1,
                             z: 1,
-                            duration: animationTime + 0.125 * index - 0.375
+                            duration: params.animationTime + 0.125 * index - 0.375 // Stagger the animations
                         });
 
                         gsap.to(child.mesh.position, {
                             x: child.position.x,
                             y: child.position.y,
                             z: child.position.z,
-                            duration: animationTime,
+                            duration: params.animationTime,
                             onComplete: function () {
                                 child.isAnimating = false; // Set isAnimating to false once the animation is complete
                             }
@@ -138,7 +134,10 @@
         }
 
         function buildOctree(rootParent, voxelList, height) {
-            if (height <= -2) {
+            console.log ("- - - - - -")
+            console.log (rootParent.size)
+            console.log (leafSize)
+            if (rootParent.size == leafSize * 2) {
                 voxelList.forEach(voxel => {
                     rootParent.addChild(voxel);
                 });
@@ -155,7 +154,6 @@
                 let thisColor = calculateMeanColor(childVoxels);
 
                 if (childVoxels.length > 0) {
-
                     // Create a new voxel that represents this sub-space
                     var childVoxel = new Voxel(subBox.position, subBox.size, thisColor, 1);
 
@@ -254,10 +252,10 @@
                 alpha: true,
                 antialias: true
             });
+
             renderer.shadowMap.enabled = true;
             renderer.shadowMapSoft = true;
             renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
 
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             renderer.setScissorTest(true);
@@ -302,54 +300,53 @@
             shadowPlaneMesh.receiveShadow = true;
 
             scene.add(shadowPlaneMesh);
-
-
-
         }
 
-        function loadModel() {
+        async function loadModel() {
             const loader = new GLTFLoader();
 
-            loader.load(modelURL, (gltf) => {
-                glbModel = gltf.scene;
+            updateSceneSize();
+            render();
 
-                console.log("here")
+            loader.load(modelURL, async (gltf) => {
 
-                voxelizeModel(gltf.scene);
+                await voxelizeModel(gltf.scene);
 
-                // loaderEl.style.opacity = 0
                 updateSceneSize();
                 render();
 
                 // Calculate the bounding box
                 for (let voxel of voxelList) {
+
                     let x = voxel.position.x;
                     let y = voxel.position.y;
                     let z = voxel.position.z;
 
                     xMax = Math.max(xMax, x + leafSize / 2);
-                    xMin = Math.min(xMin, x - leafSize / 2);
                     yMax = Math.max(yMax, y + leafSize / 2);
-                    yMin = Math.min(yMin, y - leafSize / 2);
                     zMax = Math.max(zMax, z + leafSize / 2);
+
+                    xMin = Math.min(xMin, x - leafSize / 2);
+                    yMin = Math.min(yMin, y - leafSize / 2);
                     zMin = Math.min(zMin, z - leafSize / 2);
+
                 }
 
-
                 const maxDimension = Math.max(xMax - xMin, yMax - yMin, zMax - zMin);
-                const maxHeight = Math.ceil(Math.log2(maxDimension))
-                const rootSize = Math.pow(2, maxHeight);
 
+                const maxHeight = Math.ceil(Math.log2(maxDimension / leafSize))
+
+                const rootSize = Math.pow(2, maxHeight) * leafSize;
                 var meanPosition = [
                     xMin + maxHeight / 2,
                     yMin + maxHeight / 2,
-                    zMin + maxHeight / 2
+                    zMin + maxHeight / 2,
                 ]
 
                 var lookAtPos = [
                     xMax / 2 + xMin / 2,
                     yMax / 2 + yMin / 2,
-                    zMax / 2 + zMin / 2
+                    zMax / 2 + zMin / 2,
                 ]
 
                 orbit.target.set(...lookAtPos);
@@ -357,14 +354,13 @@
 
                 const rootPosition = new THREE.Vector3(...meanPosition);
                 const root = new Voxel(rootPosition, rootSize, calculateMeanColor(voxelList), 1);
-                scene.add(root.mesh);
                 buildOctree(root, voxelList, maxHeight);
+                scene.add(root.mesh);
+
             }, undefined, (error) => {
-                console.error(error);
+                console.error("Error: ", error);
             });
         }
-
-
 
         const rayDirections = [
             new THREE.Vector3(1, 0, 0),
@@ -373,10 +369,6 @@
             new THREE.Vector3(0, 0, 1),
             new THREE.Vector3(0, 0, -1),
         ];
-
-        async function sleep(ms) {
-            return new Promise(resolve => setTimeout(resolve, ms));
-        }
 
         async function voxelizeModel(importedScene) {
             const importedMeshes = [];
@@ -398,50 +390,40 @@
 
             boundingBox = new THREE.Box3().setFromObject(importedScene);
 
-            const loadingBar = document.getElementById("loading-bar");
-
             for (let i = boundingBox.min.x; i < boundingBox.max.x; i += params.boxSize) {
                 for (let j = boundingBox.min.y; j < boundingBox.max.y; j += params.boxSize) {
                     for (let k = boundingBox.min.z; k < boundingBox.max.z; k += params.boxSize) {
                         for (let meshCnt = importedMeshes.length - 1; meshCnt >= 0; meshCnt--) {
-
-                            // calculate percentage
-                            let percentage = (i - boundingBox.min.x) / (boundingBox.max.x - boundingBox.min.x);
-                            console.log(percentage)
-                            loadingBar.style.width = percentage * 100 + "%";
-
-
                             const mesh = importedMeshes[meshCnt];
                             const color = new THREE.Color();
                             const { h, s, l } = mesh.material.color.getHSL(color);
                             color.setHSL(h, s, l * .8 + .3);
                             const pos = new THREE.Vector3(i, j, k);
-
                             if (isInsideMesh(pos, rayDirections, mesh)) {
                                 const voxel = new Voxel(
                                     pos,
                                     leafSize,
                                     color
                                 );
-
                                 voxelList.push(voxel);
                                 break;
                             }
-
-                            await sleep(0);
                         }
                     }
                 }
             }
+
+            console.log("Voxelization complete")
+            document.getElementById("centered-text").innerHTML = "";
         }
 
-        function isInsideMesh(pos, rayDirections, mesh, confidenceThreshold = 0.51) {
+        function isInsideMesh(pos, rayDirections, mesh, confidenceThreshold = 0.45) {
             let insideCount = 0;
 
             // Loop through each ray direction and count the number of times we are "inside"
             for (const ray of rayDirections) {
                 rayCaster.set(pos, ray);
-                const rayCasterIntersects = rayCaster.intersectObject(mesh, true);
+                const rayCasterIntersects = rayCaster.intersectObject(mesh, false);
 
                 if (rayCasterIntersects.length % 2 === 1) {
                     insideCount++;
@@ -461,12 +443,13 @@
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
         }
 
-        createscene();
-        loadModel();
-        window.addEventListener('resize', updateSceneSize);
-        window.addEventListener('mousemove', onMouseMove, false);
         let raycaster = new THREE.Raycaster();
         let mouse = new THREE.Vector2(Infinity, Infinity);
+        createscene();
+        loadModel();
+
+        window.addEventListener('resize', updateSceneSize);
+        window.addEventListener('mousemove', onMouseMove, false);
 
         function render() {
             renderer.setViewport(0, 0, containerEl.clientWidth, containerEl.clientHeight);
@@ -490,10 +473,14 @@
         }
 
         function updateSceneSize() {
+            // Update the camera aspect ratio
             mainCamera.aspect = containerEl.clientWidth / containerEl.clientHeight;
+            // Update the camera's projection matrix
+            mainCamera.updateProjectionMatrix();
+
+            // Update the renderer size
             renderer.setSize(containerEl.clientWidth, containerEl.clientHeight);
         }
-
 
     </script>
 </body>

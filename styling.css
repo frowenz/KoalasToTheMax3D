@@ -1,3 +1,10 @@
+#centered-text {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 100dvh;
+}
+
 #loading-container {
 	top: 0;
 	left: 0;
