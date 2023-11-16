@@ -288,18 +288,18 @@
             orbit.minDistance = 2.5;
             orbit.maxDistance = 30;
             orbit.minPolarAngle = 0
-            orbit.enableDamping = true;
+            // orbit.enableDamping = true;
 
-            const planeGeometry = new THREE.PlaneGeometry(35, 35);
-            const shadowPlaneMaterial = new THREE.ShadowMaterial({
-                opacity: .1
-            });
-            const shadowPlaneMesh = new THREE.Mesh(planeGeometry, shadowPlaneMaterial);
-            shadowPlaneMesh.position.y = -7;
-            shadowPlaneMesh.rotation.x = -.5 * Math.PI;
-            shadowPlaneMesh.receiveShadow = true;
+            // const planeGeometry = new THREE.PlaneGeometry(35, 35);
+            // const shadowPlaneMaterial = new THREE.ShadowMaterial({
+            //     opacity: .1
+            // });
+            // const shadowPlaneMesh = new THREE.Mesh(planeGeometry, shadowPlaneMaterial);
+            // shadowPlaneMesh.position.y = -7;
+            // shadowPlaneMesh.rotation.x = -.5 * Math.PI;
+            // shadowPlaneMesh.receiveShadow = true;
 
-            scene.add(shadowPlaneMesh);
+            // scene.add(shadowPlaneMesh);
         }
 
         async function loadModel() {
