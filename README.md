@@ -14,7 +14,7 @@ https://github.com/frowenz/KoalasToTheMax3D/assets/69015620/bdf65ca2-d876-48a4-a
 ## Credits
 - [Koala](https://poly.pizza/m/9x4UY7n27nI) by [jeremy](https://poly.pizza/u/jeremy) [[CC-BY](https://creativecommons.org/licenses/by/3.0/)] via Poly Pizza 
 
-- [Bonsai] (https://poly.pizza/m/44XK5UHTd4Q) by [Don Carson](https://poly.pizza/u/Don%20Carson) [[CC-BY](https://creativecommons.org/licenses/by/3.0/)] via Poly Pizza
+- [Bonsai](https://poly.pizza/m/44XK5UHTd4Q) by [Don Carson](https://poly.pizza/u/Don%20Carson) [[CC-BY](https://creativecommons.org/licenses/by/3.0/)] via Poly Pizza
 
 ## License
 [MIT](LICENSE)
